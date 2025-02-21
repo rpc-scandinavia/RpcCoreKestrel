@@ -12,4 +12,9 @@
         <Copyright>Copyright © RPC Scandinavia 2025 - $([System.DateTime]::UtcNow.ToString(yyyy))</Copyright>
     </PropertyGroup>
 
+    <ItemGroup>
+      <Content Include=".targets\Base Library.target" />
+      <Content Include=".targets\Base.target" />
+    </ItemGroup>
+
 </Project>
