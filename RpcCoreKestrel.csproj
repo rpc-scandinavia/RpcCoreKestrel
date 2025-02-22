@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <Import Project="./.targets/Base Library.target" />
+	<Import Project="./.targets/MicrosoftAspNet Server.target" />
 
     <PropertyGroup>
         <RootNamespace>RpcScandinavia.Core.Kestrel</RootNamespace>
@@ -15,6 +16,7 @@
     <ItemGroup>
       <Content Include=".targets\Base Library.target" />
       <Content Include=".targets\Base.target" />
+      <Content Include=".targets\MicrosoftAspNet Server.target" />
     </ItemGroup>
 
 </Project>
