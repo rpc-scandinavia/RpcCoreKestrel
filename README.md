@@ -20,9 +20,6 @@ services.AddKestrel((options) => {
 		listenOptions.Protocols = HttpProtocols.Http2;
 	});
 
-	// Allow any client certificate.
-	options.ConfigureHttpsOptions();
-
 	// Local socket.
 	options.ConfigureSocket("SocketName", "/tmp");
 

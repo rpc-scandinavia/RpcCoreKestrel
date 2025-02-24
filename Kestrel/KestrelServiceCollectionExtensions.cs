@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Options;
+using RpcScandinavia.Repository;
 namespace RpcScandinavia.Core.Kestrel;
 
 /// <summary>
@@ -38,12 +39,16 @@ public static class KestrelServiceCollectionExtensions {
 	/// <param name="options">The Kestrel HTTP application options.</param>
 	/// <returns>The service collection.</returns>
 	public static IServiceCollection AddKestrelHttpApplication(this IServiceCollection services, Action<KestrelHttpApplicationOptions> options) {
+		// Add the Kestrel HTTP application.
 		services.AddSingleton<KestrelHttpApplication>();
 		services.AddSingleton<IHostApplicationLifetime>((serviceProvider) => serviceProvider.GetRequiredService<KestrelHttpApplication>());
 		services.AddSingleton<IHost>((serviceProvider) => serviceProvider.GetRequiredService<KestrelHttpApplication>());
 		services.AddSingleton<IHostedService>((serviceProvider) => serviceProvider.GetRequiredService<KestrelHttpApplication>());
 		services.AddSingleton<IHttpApplication<HttpContext>>((serviceProvider) => serviceProvider.GetRequiredService<KestrelHttpApplication>());
 		services.TryAddSingleton<IHostEnvironment, HostingEnvironment>();
+
+		// Add required services.
+		services.AddHttpContextAccessor();
 
 		// The "IConfigureOptions<KestrelHttpApplicationOptions>" must be added before the options are configures.
 		services.AddTransient<IConfigureOptions<KestrelHttpApplicationOptions>, KestrelHttpApplicationOptionsSetup>();

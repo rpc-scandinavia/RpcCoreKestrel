@@ -303,6 +303,13 @@ public class KestrelHttpApplication : IHttpApplication<HttpContext>, IHost, IHos
 		IServiceScope scope = this.provider.CreateScope();
 		DefaultHttpContext context = new DefaultHttpContext(contextFeatures);
 		context.RequestServices = scope.ServiceProvider;
+
+		// Set the context in the HTTP context accessor.
+		if (context.RequestServices.GetService<IHttpContextAccessor>() is IHttpContextAccessor httpContextAccessor) {
+			httpContextAccessor.HttpContext = context;
+		}
+
+		// Return the context.
 		return context;
 	} // CreateContext
 

@@ -29,12 +29,16 @@ public interface IKestrelAuthService {
 	public Task<ClaimsPrincipal> BearerAuthenticateAsync(String token);
 
 	/// <summary>
-	/// Called by the Kestrel authentication middleware to perform a API-key authentication.
+	/// Called by the Kestrel authentication middleware to perform an API-key authentication.
 	/// The Kestrel authentication service must validate the API-key, and return the user claims principal that is
 	/// associated with the API-key. The user claims principal can for instance be a system API-user.
 	/// </summary>
 	public Task<ClaimsPrincipal> ApiKeyAuthenticateAsync(String authKey);
 
+	/// <summary>
+	/// Called by the Kestrel authentication middleware after the specified user has been set as the current user.
+	/// </summary>
+	/// <param name="principal">The new active user claims principal.</param>
 	public Task SetActiveUserAsync(ClaimsPrincipal principal);
 
 	/// <summary>
