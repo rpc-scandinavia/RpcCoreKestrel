@@ -14,7 +14,7 @@ namespace RpcScandinavia.Core.Kestrel;
 /// The <value>Authorization</value> host header is recognized in these forms:
 /// * Basic authentication: <value>basic user:password</value>
 /// * Bearer authentication: <value>bearer token</value>
-/// * API-key authentication: <value>apikey data</value>
+/// * gRPC-key authentication: <value>apikey data</value>
 /// </summary>
 public class KestrelAuthMiddleware {
 	private readonly RequestDelegate next;
@@ -29,14 +29,17 @@ public class KestrelAuthMiddleware {
 			if (context.Request.Headers.Authorization.Count > 0) {
 				// Decode and split the authorization header value.
 				String authScheme = context.Request.Headers.Authorization.ToString().Split(" ").FirstOrDefault(String.Empty);
-				String authCredentials = Encoding.UTF8.GetString(Convert.FromBase64String(context.Request.Headers.Authorization.ToString().Split(" ").Skip(1).FirstOrDefault(String.Empty)));
+				String authCredentials = String.Empty;
+				try {
+					authCredentials = Encoding.UTF8.GetString(Convert.FromBase64String(context.Request.Headers.Authorization.ToString().Split(" ").Skip(1).FirstOrDefault(String.Empty)));
+				} catch {}
 
 				// Authenticate.
 				ClaimsPrincipal authPrincipal = null;
 				switch (authScheme.ToLower()) {
 					case "basic":
-						String authUserIdentification = authCredentials.Split(':').FirstOrDefault();
-						String authUserPassword = authCredentials.Split(':').Skip(1).FirstOrDefault();
+						String authUserIdentification = authCredentials.Split(':').FirstOrDefault(String.Empty);
+						String authUserPassword = authCredentials.Split(':').Skip(1).FirstOrDefault(String.Empty);
 						authPrincipal = await kestrelAuthService.BasicAuthenticateAsync(authUserIdentification, authUserPassword);
 						break;
 					case "bearer":

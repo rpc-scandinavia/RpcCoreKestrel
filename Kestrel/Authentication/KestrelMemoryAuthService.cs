@@ -51,8 +51,11 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 
 		// Save the bearer token/principal.
 		this.tokensSemaphore.Wait();
-		this.tokens[token] = principal;
-		this.tokensSemaphore.Release();
+		try {
+			this.tokens[token] = principal;
+		} finally {
+			this.tokensSemaphore.Release();
+		}
 
 		// Return the principal.
 		return principal;
@@ -60,12 +63,15 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 
 	public async Task<ClaimsPrincipal> BearerAuthenticateAsync(String token) {
 		// Get the user associated with the token.
+		ClaimsPrincipal principal = null;
 		this.tokensSemaphore.Wait();
-		if (this.tokens.TryGetValue(token, out ClaimsPrincipal principal) == false) {
+		try {
+			if (this.tokens.TryGetValue(token, out principal) == false) {
+				throw new UnauthorizedAccessException($"Unknown authorization token.") { HResult = StatusCodes.Status404NotFound };
+			}
+		} finally {
 			this.tokensSemaphore.Release();
-			throw new UnauthorizedAccessException($"Unknown authorization token.") { HResult = StatusCodes.Status404NotFound };
 		}
-		this.tokensSemaphore.Release();
 
 		// Validate the token.
 		JwtSecurityTokenHandler tokenHandler = new JwtSecurityTokenHandler();
@@ -93,8 +99,11 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 				// Generate a new Bearer token, and save the token/principal.
 				token = await this.GenerateBearerTokenAsync(principal);
 				this.tokensSemaphore.Wait();
-				this.tokens[token] = principal;
-				this.tokensSemaphore.Release();
+				try {
+					this.tokens[token] = principal;
+				} finally {
+					this.tokensSemaphore.Release();
+				}
 			}
 
 			// Return the user principal.
@@ -107,7 +116,7 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 	} // BearerAuthenticateAsync
 
 	public async Task<ClaimsPrincipal> ApiKeyAuthenticateAsync(String token) {
-		throw new NotImplementedException($"API Key Authentication is not supported.");
+		throw new NotImplementedException($"gRPC Key Authentication is not supported.");
 	} // ApiKeyAuthenticateAsync
 
 	public async Task SetActiveUserAsync(ClaimsPrincipal principal) {
@@ -115,12 +124,15 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 
 	public async Task<String> GetBearerTokenAsync(ClaimsPrincipal principal) {
 		this.tokensSemaphore.Wait();
-		String bearerToken = this.tokens
-			.Where((keyValuePair) => keyValuePair.Value == principal)
-			.Select((keyValuePair) => keyValuePair.Key)
-			.SingleOrDefault();
-		this.tokensSemaphore.Wait();
-		return bearerToken;
+		try {
+			String bearerToken = this.tokens
+				.Where((keyValuePair) => keyValuePair.Value == principal)
+				.Select((keyValuePair) => keyValuePair.Key)
+				.SingleOrDefault();
+			return Convert.ToBase64String(Encoding.Default.GetBytes(bearerToken ?? String.Empty));
+		} finally {
+			this.tokensSemaphore.Release();
+		}
 	} // GetBearerTokenAsync
 
 	//------------------------------------------------------------------------------------------------------------------
@@ -250,16 +262,18 @@ public class KestrelMemoryAuthServiceUser {
 	} // Claims
 
 	public ClaimsPrincipal ToClaimsPrincipal(String authentication = "Basic") {
-		if (this.userClaims.FirstOrDefault((claim) => claim.Type.Equals(ClaimTypes.Authentication)) == null) {
-			this.userClaims.Add(new Claim(ClaimTypes.Authentication, true.ToString()));
+		List<Claim> claims = new List<Claim>(this.userClaims);
+
+		if (claims.FirstOrDefault((claim) => claim.Type.Equals(ClaimTypes.Authentication)) == null) {
+			claims.Add(new Claim(ClaimTypes.Authentication, true.ToString()));
 		}
-		if (this.userClaims.FirstOrDefault((claim) => claim.Type.Equals(ClaimTypes.Name)) == null) {
-			this.userClaims.Add(new Claim(ClaimTypes.Name, this.userName));
+		if (claims.FirstOrDefault((claim) => claim.Type.Equals(ClaimTypes.Name)) == null) {
+			claims.Add(new Claim(ClaimTypes.Name, this.userName));
 		}
 
 		return new ClaimsPrincipal(
 			new ClaimsIdentity(
-				this.userClaims,
+				claims,
 				authentication ?? "Basic",
 				ClaimTypes.Name,
 				ClaimTypes.Role

@@ -103,15 +103,15 @@ public static class KestrelServiceCollectionExtensions {
 
 		// Add some required Microsoft internal services, by using reflection.
 		services.TryAddSingleton(
-			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Server.Kestrel.Core.IHttpsConfigurationService"),
-			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Server.Kestrel.Core.HttpsConfigurationService")
+			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Miscellaneous.Kestrel.Core.IHttpsConfigurationService"),
+			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Miscellaneous.Kestrel.Core.HttpsConfigurationService")
 		);
 		services.TryAddSingleton(
-			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.KestrelMetrics")
+			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Miscellaneous.Kestrel.Core.Internal.Infrastructure.KestrelMetrics")
 		);
 		services.AddTransient(
 			typeof(IConfigureOptions<KestrelServerOptions>),
-			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Server.Kestrel.Core.Internal.KestrelServerOptionsSetup")
+			KestrelServiceCollectionExtensions.GetInternalType(typeof(KestrelServer), "Microsoft.AspNetCore.Miscellaneous.Kestrel.Core.Internal.KestrelServerOptionsSetup")
 		);
 
 		// Add basic services, in case they are missing.

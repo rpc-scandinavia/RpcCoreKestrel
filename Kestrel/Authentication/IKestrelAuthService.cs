@@ -29,9 +29,9 @@ public interface IKestrelAuthService {
 	public Task<ClaimsPrincipal> BearerAuthenticateAsync(String token);
 
 	/// <summary>
-	/// Called by the Kestrel authentication middleware to perform an API-key authentication.
-	/// The Kestrel authentication service must validate the API-key, and return the user claims principal that is
-	/// associated with the API-key. The user claims principal can for instance be a system API-user.
+	/// Called by the Kestrel authentication middleware to perform an gRPC-key authentication.
+	/// The Kestrel authentication service must validate the gRPC-key, and return the user claims principal that is
+	/// associated with the gRPC-key. The user claims principal can for instance be a system gRPC-user.
 	/// </summary>
 	public Task<ClaimsPrincipal> ApiKeyAuthenticateAsync(String authKey);
 
@@ -44,6 +44,7 @@ public interface IKestrelAuthService {
 	/// <summary>
 	/// Called by the Kestrel authentication middleware when a user is authenticated, and a bearer token is sent to the client.
 	/// The bearer token must be able to authenticate the user claims principal by calling <see cref="BearerAuthenticateAsync"/>.
+	/// Note that the bearer token must be BASE64 encoded!
 	/// </summary>
 	/// <param name="principal">The user claims principal.</param>
 	/// <returns>The bearer token.</returns>
