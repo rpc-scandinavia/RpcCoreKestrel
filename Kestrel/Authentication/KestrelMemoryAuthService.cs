@@ -2,12 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
-using System.Security.Authentication;
 using System.Security.Claims;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using RpcScandinavia.Core.Kestrel;
@@ -35,21 +33,30 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 	//------------------------------------------------------------------------------------------------------------------
 	// KestrelMemoryAuthService methods.
 	//------------------------------------------------------------------------------------------------------------------
-	public async Task<ClaimsPrincipal> BasicAuthenticateAsync(String userIdentification, String userPassword) {
+	public async Task<ClaimsPrincipal> BasicAuthenticateAsync(String userIdentification, String userPassword, String twoFactorCode = null) {
 		// Authenticate the user and create the claims principal.
 		KestrelMemoryAuthServiceUser user = this.options.Value.GetUser(userIdentification);
 		if (user == null) {
-			throw new AuthenticationException($"Unknown user identification '{userIdentification}' or password.") { HResult = StatusCodes.Status404NotFound };
+			throw new KestrelAuthInvalidUserIdentificationException(userIdentification);
 		}
 		if (user.Password != userPassword) {
-			throw new AuthenticationException($"Unknown user identification '{userIdentification}' or password.") { HResult = StatusCodes.Status401Unauthorized };
+			throw new KestrelAuthInvalidUserPasswordException(userIdentification, userPassword);
 		}
 
-		// Generate Bearer token.
+		// Two-factor authentication.
+		if (user.TwoFactorCode > 0) {
+			if (String.IsNullOrWhiteSpace(twoFactorCode) == true) {
+				throw new KestrelAuthTwoFactorRequiredException(KestrelAuthTwoFactorType.UnknownNumeric, userIdentification, userPassword);
+			} else if (user.TwoFactorCode.ToString() != twoFactorCode) {
+				throw new KestrelAuthInvalidTwoFactorException(KestrelAuthTwoFactorType.UnknownNumeric, userIdentification, userPassword, twoFactorCode);
+			}
+		}
+
+		// Generate bearer token.
 		ClaimsPrincipal principal = user.ToClaimsPrincipal("Basic");
 		String token = await this.GenerateBearerTokenAsync(principal);
 
-		// Save the bearer token/principal.
+		// Save the bearer token/claims principal.
 		this.tokensSemaphore.Wait();
 		try {
 			this.tokens[token] = principal;
@@ -62,18 +69,18 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 	} // BasicAuthenticateAsync
 
 	public async Task<ClaimsPrincipal> BearerAuthenticateAsync(String token) {
-		// Get the user associated with the token.
+		// Get the user associated with the bearer token.
 		ClaimsPrincipal principal = null;
 		this.tokensSemaphore.Wait();
 		try {
 			if (this.tokens.TryGetValue(token, out principal) == false) {
-				throw new UnauthorizedAccessException($"Unknown authorization token.") { HResult = StatusCodes.Status404NotFound };
+				throw new KestrelAuthInvalidBearerTokenException(token);
 			}
 		} finally {
 			this.tokensSemaphore.Release();
 		}
 
-		// Validate the token.
+		// Validate the bearer token.
 		JwtSecurityTokenHandler tokenHandler = new JwtSecurityTokenHandler();
 		Byte[] tokenKey = Encoding.UTF8.GetBytes(this.options.Value.BearerTokenKey);
 		try {
@@ -86,7 +93,7 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 				ClockSkew = TimeSpan.Zero
 			};
 
-			// Validate the token.
+			// Validate the bearer token.
 			// This throws an exception on failure.
 			tokenHandler.ValidateToken(token, validationParams, out SecurityToken securityToken);
 
@@ -108,10 +115,10 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 
 			// Return the user principal.
 			return principal;
-		} catch (SecurityTokenExpiredException) {
-			throw new UnauthorizedAccessException($"Authorization token expired.") { HResult = StatusCodes.Status401Unauthorized };
+		} catch (SecurityTokenExpiredException exception) {
+			throw new KestrelAuthExpiredBearerTokenException(token, exception.Expires);
 		} catch {
-			throw new UnauthorizedAccessException($"Invalid authorization token.") { HResult = StatusCodes.Status401Unauthorized };
+			throw new KestrelAuthInvalidBearerTokenException(token);
 		}
 	} // BearerAuthenticateAsync
 
@@ -125,11 +132,10 @@ public class KestrelMemoryAuthService : IKestrelAuthService {
 	public async Task<String> GetBearerTokenAsync(ClaimsPrincipal principal) {
 		this.tokensSemaphore.Wait();
 		try {
-			String bearerToken = this.tokens
+			return this.tokens
 				.Where((keyValuePair) => keyValuePair.Value == principal)
 				.Select((keyValuePair) => keyValuePair.Key)
-				.SingleOrDefault();
-			return Convert.ToBase64String(Encoding.Default.GetBytes(bearerToken ?? String.Empty));
+				.SingleOrDefault(String.Empty);
 		} finally {
 			this.tokensSemaphore.Release();
 		}
@@ -218,12 +224,14 @@ public class KestrelMemoryAuthServiceOptions {
 public class KestrelMemoryAuthServiceUser {
 	private String userIdentification;
 	private String userPassword;
+	private Int32 userTwoFactorCode;
 	private String userName;
 	private List<Claim>	userClaims;
 
 	public KestrelMemoryAuthServiceUser() {
 		this.userIdentification = Guid.NewGuid().ToString();
 		this.userPassword = String.Empty;
+		this.userTwoFactorCode = 0;
 		this.userName = String.Empty;
 		this.userClaims = new List<Claim>();
 	} // KestrelMemoryAuthServiceUser
@@ -245,6 +253,15 @@ public class KestrelMemoryAuthServiceUser {
 			this.userPassword = value ?? String.Empty;
 		}
 	} // Password
+
+	public Int32 TwoFactorCode {
+		get {
+			return this.userTwoFactorCode;
+		}
+		set {
+			this.userTwoFactorCode = value;
+		}
+	} // TwoFactorCode
 
 	public String Name {
 		get {

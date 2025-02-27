@@ -14,14 +14,16 @@ public interface IKestrelAuthService {
 	/// </summary>
 	/// <param name="userIdentification">The received user identifier.</param>
 	/// <param name="userPassword">The received user password.</param>
+	/// <param name="twoFactorCode">The two-factor authentication code, or null.</param>
 	/// <returns>The authenticated user claims principal, or throws an exception when the authentication fails.</returns>
 	/// <exception cref="Exception">Exception containing the reason the authentication failed.</exception>
-	public Task<ClaimsPrincipal> BasicAuthenticateAsync(String userIdentification, String userPassword);
+	public Task<ClaimsPrincipal> BasicAuthenticateAsync(String userIdentification, String userPassword, String twoFactorCode = null);
 
 	/// <summary>
 	/// Called by the Kestrel authentication middleware to perform a bearer token user authentication.
 	/// The Kestrel authentication service must validate the bearer token, and return the user claims principal that
-	/// is associated with the token, and returned by <see cref="GetBearerTokenAsync"/>.
+	/// is associated with the bearer token, and returned by <see cref="GetBearerTokenAsync"/>.
+	/// Note that the bearer token should <c>not</c> be BASE64 encoded!
 	/// </summary>
 	/// <param name="token">The received bearer token.</param>
 	/// <returns>The authenticated user claims principal, or throws an exception when the authentication fails.</returns>
@@ -44,7 +46,7 @@ public interface IKestrelAuthService {
 	/// <summary>
 	/// Called by the Kestrel authentication middleware when a user is authenticated, and a bearer token is sent to the client.
 	/// The bearer token must be able to authenticate the user claims principal by calling <see cref="BearerAuthenticateAsync"/>.
-	/// Note that the bearer token must be BASE64 encoded!
+	/// Note that the bearer token should <c>not</c> be BASE64 encoded!
 	/// </summary>
 	/// <param name="principal">The user claims principal.</param>
 	/// <returns>The bearer token.</returns>

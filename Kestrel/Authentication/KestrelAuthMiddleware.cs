@@ -15,6 +15,9 @@ namespace RpcScandinavia.Core.Kestrel;
 /// * Basic authentication: <value>basic user:password</value>
 /// * Bearer authentication: <value>bearer token</value>
 /// * gRPC-key authentication: <value>apikey data</value>
+///
+/// The <value>X-2FA-Code</value> host header is recognized in this form:
+/// * Two-factor authenticatin: <value>two-factor code</value>
 /// </summary>
 public class KestrelAuthMiddleware {
 	private readonly RequestDelegate next;
@@ -27,7 +30,7 @@ public class KestrelAuthMiddleware {
 		try {
 			// Authorize a user.
 			if (context.Request.Headers.Authorization.Count > 0) {
-				// Decode and split the authorization header value.
+				// Get, decode and split the authorization header value.
 				String authScheme = context.Request.Headers.Authorization.ToString().Split(" ").FirstOrDefault(String.Empty);
 				String authCredentials = String.Empty;
 				try {
@@ -35,41 +38,121 @@ public class KestrelAuthMiddleware {
 				} catch {}
 
 				// Authenticate.
-				ClaimsPrincipal authPrincipal = null;
+				ClaimsPrincipal principal = null;
+				String authTwoFactorCode = null;
+				String token = null;
 				switch (authScheme.ToLower()) {
 					case "basic":
+						// Get the "X-2FA-Code" header value.
+						if (context.Request.Headers.ContainsKey("X-2FA-Code") == true) {
+							authTwoFactorCode = context.Request.Headers["X-2FA-Code"].ToString();
+						}
+
 						String authUserIdentification = authCredentials.Split(':').FirstOrDefault(String.Empty);
 						String authUserPassword = authCredentials.Split(':').Skip(1).FirstOrDefault(String.Empty);
-						authPrincipal = await kestrelAuthService.BasicAuthenticateAsync(authUserIdentification, authUserPassword);
+						principal = await kestrelAuthService.BasicAuthenticateAsync(authUserIdentification, authUserPassword, authTwoFactorCode);
+						token = await kestrelAuthService.GetBearerTokenAsync(principal);
 						break;
 					case "bearer":
 						String authToken = authCredentials;
-						authPrincipal = await kestrelAuthService.BearerAuthenticateAsync(authToken);
+						principal = await kestrelAuthService.BearerAuthenticateAsync(authToken);
+						token = await kestrelAuthService.GetBearerTokenAsync(principal);
 						break;
 					case "apikey":
 						String authKey = authCredentials;
-						authPrincipal = await kestrelAuthService.ApiKeyAuthenticateAsync(authKey);
+						principal = await kestrelAuthService.ApiKeyAuthenticateAsync(authKey);
+						token = await kestrelAuthService.GetBearerTokenAsync(principal);
 						break;
 					default:
 						throw new UnauthorizedAccessException($"Unknown authorization scheme '{authScheme}'.") { HResult = StatusCodes.Status400BadRequest };
 				}
 
-				// Set the user.
-				context.User = authPrincipal;
-				await kestrelAuthService.SetActiveUserAsync(authPrincipal);
+				// Validate that the IKestrelAuthService actually returned a user claims principal.
+				if (principal == null) {
+					throw new Exception($"Internal server error. The Kestrel authentication ervice did not return a claims principal!");
+				}
 
-				// Set the Bearer token in the response headers.
-				String bearerToken = await kestrelAuthService.GetBearerTokenAsync(authPrincipal);
-				context.Response.Headers.Authorization = $"Bearer {bearerToken}";
+				// Set the user.
+				context.User = principal;
+				await kestrelAuthService.SetActiveUserAsync(principal);
+
+				// Set the bearer token in the response headers.
+				// The bearer token should be Base 64 encoded.
+				context.Response.Headers.Authorization = $"Bearer {Convert.ToBase64String(Encoding.Default.GetBytes(token))}";
 
 				// Log.
 				if (logger.IsEnabled(LogLevel.Information) == true) {
-					logger.LogInformation($"User '{authPrincipal.Identity.Name}' was authenticated using '{authScheme}' scheme.");
+					if (authTwoFactorCode == null) {
+						logger.LogInformation($"User '{principal.Identity?.Name}' was authenticated using '{authScheme}' scheme.");
+					} else {
+						logger.LogInformation($"User '{principal.Identity?.Name}' was authenticated using two-factor code '{authTwoFactorCode}' and '{authScheme}' scheme.");
+					}
+				}
+				if (logger.IsEnabled(LogLevel.Debug) == true) {
+					logger.LogDebug($"Bearer token: '{token}'.");
 				}
 			}
 
 			// Iterate to the next middleware in the pipe.
 			await this.next(context);
+		} catch (KestrelAuthInvalidUserIdentificationException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Error) == true) {
+				logger.LogError(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.StatusCode = exception.HResult;
+		} catch (KestrelAuthInvalidUserPasswordException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Error) == true) {
+				logger.LogError(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.StatusCode = exception.HResult;
+		} catch (KestrelAuthInvalidBearerTokenException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Error) == true) {
+				logger.LogError(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.StatusCode = exception.HResult;
+		} catch (KestrelAuthExpiredBearerTokenException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Error) == true) {
+				logger.LogError(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.StatusCode = exception.HResult;
+		} catch (KestrelAuthInvalidTwoFactorException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Error) == true) {
+				logger.LogError(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.StatusCode = exception.HResult;
+		} catch (KestrelAuthExpiredTwoFactorException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Error) == true) {
+				logger.LogError(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.Headers.Append("X-2FA-Required", true.ToString());
+			context.Response.StatusCode = exception.HResult;
+		} catch (KestrelAuthTwoFactorRequiredException exception) {
+			// Log.
+			if (logger.IsEnabled(LogLevel.Warning) == true) {
+				logger.LogWarning(exception, exception.Message);
+			}
+
+			// Return the error.
+			context.Response.Headers.Append("X-2FA-Required", true.ToString());
+			context.Response.StatusCode = exception.HResult;
 		} catch (Exception exception) {
 			// Log.
 			if (logger.IsEnabled(LogLevel.Error) == true) {
